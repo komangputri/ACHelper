@@ -6,7 +6,7 @@ const admin = require('firebase-admin');
 const request_api = require('request');
 const axios = require('axios');
 const ActiveCollabUrl = 'http://ac.bounche.com/api/v1/';
-const LoginUrl = 'http://helper.bounche.com';
+const LoginUrl = 'https://achelper-f04aa.firebaseapp.com';
 const UserCollection = '/users/';
 const TaskUrl = '';
 
@@ -25,25 +25,23 @@ exports.login = functions.https.onRequest((request, response) => {
             if (userObject === null || userObject.verifyToken !== verifyToken){
                 throw new Error("Not Found")
             }
-            axios.post(ActiveCollabUrl+'/issue-token', {
+            axios.post(ActiveCollabUrl+'issue-token', {
                 username: email,
                 password: password,
                 client_name: "AC Helper Skype",
                 client_vendor: "Bounche Indonesia"
             })
             .then( response => {
-                console.log(response);
-                const token = response.token;
-                admin.database().ref(UserCollection + skype).set({
+                const data = response.data;
+                admin.database().ref(UserCollection + skype).update({
                     verifyToken: null,
-                    ACToken: token,
+                    ACToken: data.token,
                     ACEmail: email,
                 });
                 response.status(200).json(response);
             })
             .catch( error => {
-                console.error("axios error: ", error);
-                response.status(500).json({ error: error.message });
+                response.status(500).json(error);
             });
         }).catch( error => {
             console.log(error);
@@ -124,7 +122,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                         ACToken: null,
                         ACEmail: null
                     });
-                    let responseToUser = "Please Signin on this Link "+LoginUrl+"/"+verificationToken;
+                    let responseToUser = "Please Signin on this Link "+LoginUrl+"/?token="+verificationToken;
                     console.log('response: ' + responseToUser);
                     sendResponse(responseToUser);
                 }else{
@@ -148,23 +146,25 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                         headers: {'X-Angie-AuthApiToken': userObject.ACToken}
                     };
                     //Get User Session == User ID
-                    axios.get(ActiveCollabUrl+'/user-session',axiosConfig)
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
                         .then( ac_response => {
-                            ACUserID = ac_response.logged_user_id;
+                            ACUserID = ac_response.data.logged_user_id;
                             if (ACUserID === 0){
                                 throw new Error('Not Authorize');
                             }
-                            axios.get(ActiveCollabUrl+'/users/'+ACUserID+'/tasks',axiosConfig)
+                            axios.get(ActiveCollabUrl+'users/'+ACUserID+'/tasks',axiosConfig)
                                 .then( task_response => {
                                     //Send Task List
                                     let responseToUser = "Task List: ";
-                                    task_response.tasks.forEach((result, index) => {
+                                    console.log(JSON.stringify(task_response.data));
+                                    task_response.data.tasks.forEach((result, index) => {
                                         responseToUser += (index+1) + result.name
                                     });
                                     console.log('response: ' + responseToUser);
                                     sendResponse(responseToUser);
                                 }).catch( error => {
-                                   throw new Error('Error Task List')
+                                    console.log("task Error: "+error);
+                                    throw new Error('Error Task List')
                                 });
                         })
                         .catch( error => {
