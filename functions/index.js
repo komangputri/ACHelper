@@ -4,14 +4,57 @@ const functions = require('firebase-functions'); // Cloud Functions for Firebase
 const DialogflowApp = require('actions-on-google').DialogflowApp; // Google Assistant helper library
 const admin = require('firebase-admin');
 const request_api = require('request');
+const axios = require('axios');
 const ActiveCollabUrl = 'http://ac.bounche.com/api/v1/';
 const LoginUrl = 'http://helper.bounche.com';
 const UserCollection = '/users/';
 
+// CORS Express middleware to enable CORS Requests.
+const cors = require('cors')({origin: true});
+
 const googleAssistantRequest = 'google'; // Constant to identify Google Assistant requests
 admin.initializeApp(functions.config().firebase);
 
+exports.login = functions.https.onRequest((request, response) => {
+    cors(request, response, () => {
+        console.log('Request body: ' + JSON.stringify(request.body));
+        const { skype, verifyToken, email, password } = request.body;
+        const getUserPromise = admin.database().ref(UserCollection + skype).once('value').then( snapshot => {
+            const userObject = snapshot.val();
+            if (userObject === null || userObject.verifyToken !== verifyToken){
+                throw new Error("Not Found")
+            }
+            axios.post(ActiveCollabUrl+'/issue-token', {
+                email: email,
+                password: password,
+                client_name: "AC Helper Skype",
+                client_vendor: "Bounche Indonesia"
+            })
+            .then( response => {
+                console.log(response);
+                const token = response.token;
+                admin.database().ref(UserCollection + skype).set({
+                    verifyToken: null,
+                    ACToken: token,
+                    ACEmail: email,
+                });
+                response.status(200).json(response);
+            })
+            .catch( error => {
+                console.error("axios error: ", error);
+                response.status(500).json({ error: error.message });
+            });
+        }).catch( error => {
+            console.log(error);
+            response.status(400).json({ error: error.message });
+        });
+    });
+});
 
+
+// exports.login = functions.https.onRequest((req, res) => {
+//     // ...
+// });
 exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
     console.log('Request headers: ' + JSON.stringify(request.headers));
     console.log('Request body: ' + JSON.stringify(request.body));
