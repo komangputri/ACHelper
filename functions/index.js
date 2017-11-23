@@ -8,6 +8,7 @@ const axios = require('axios');
 const ActiveCollabUrl = 'http://ac.bounche.com/api/v1/';
 const LoginUrl = 'http://helper.bounche.com';
 const UserCollection = '/users/';
+const TaskUrl = '';
 
 // CORS Express middleware to enable CORS Requests.
 const cors = require('cors')({origin: true});
@@ -25,7 +26,7 @@ exports.login = functions.https.onRequest((request, response) => {
                 throw new Error("Not Found")
             }
             axios.post(ActiveCollabUrl+'/issue-token', {
-                email: email,
+                username: email,
                 password: password,
                 client_name: "AC Helper Skype",
                 client_vendor: "Bounche Indonesia"
@@ -121,8 +122,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                         username: userData.name,
                         verifyToken: verificationToken,
                         ACToken: null,
-                        ACEmail: null,
-                        ACPassword: null
+                        ACEmail: null
                     });
                     let responseToUser = "Please Signin on this Link "+LoginUrl+"/"+verificationToken;
                     console.log('response: ' + responseToUser);
@@ -131,6 +131,47 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                     let responseToUser = "Already Signin";
                     console.log('response: ' + responseToUser);
                     sendResponse(responseToUser);
+                }
+            });
+        },
+        'user.task.list': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'/user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'/users/'+ACUserID+'/tasks',axiosConfig)
+                                .then( task_response => {
+                                    //Send Task List
+                                    let responseToUser = "Task List: ";
+                                    task_response.tasks.forEach((result, index) => {
+                                        responseToUser += (index+1) + result.name
+                                    });
+                                    console.log('response: ' + responseToUser);
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                   throw new Error('Error Task List')
+                                });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
                 }
             });
         },
