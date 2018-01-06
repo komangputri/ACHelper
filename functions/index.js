@@ -9,7 +9,6 @@ const ActiveCollabUrl = 'http://ac.bounche.com/api/v1/';
 const LoginUrl = 'https://achelper-f04aa.firebaseapp.com';
 const UserCollection = '/users/';
 const TaskUrl = '';
-const botbuilder = require('botbuilder')
 
 // CORS Express middleware to enable CORS Requests.
 const cors = require('cors')({origin: true});
@@ -223,6 +222,55 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                         });
                 }
             });
+        },
+
+        'user.add.task': () => {
+                let responseToUser = "Hallo tambah waktu";
+                sendResponse(responseToUser);
+            // console.log(ac_response)
+            // const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            // return Promise.all([getUserPromise]).then(results => {
+            //     const userSnapshot = results[0];
+            //     const userObject = userSnapshot.val();
+            //     if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+            //         let responseToUser = "Please Signin First";
+            //         sendResponse(responseToUser);
+            //     }else{
+            //         let ACUserID;
+            //         const axiosConfig = {
+            //             headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+            //         };
+            //         //Get User Session == User ID
+            //         axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+            //             .then( ac_response => {
+            //                 ACUserID = ac_response.data.logged_user_id;
+            //                 if (ACUserID === 0){
+            //                     throw new Error('Not Authorize');
+            //                 }
+            //                 axios.get(ActiveCollabUrl+'users/'+ACUserID+'/tasks',axiosConfig)
+            //                     .then( task_response => {
+            //                         //Send Task List
+            //                         let responseToUser = "Task List: <br/>";
+            //                         console.log(JSON.stringify(task_response.data));
+            //                         task_response.data.tasks.forEach((result, index) => {
+            //                             responseToUser += (index+1) + " " + result.name + "<br/>"
+            //                         });
+            //
+            //                         responseToUser += "What do you want me to do next? <br/> 1. Add Task <br/> 2. Delete Task <br/> 3. View Project <br/> 4. Add Project <br/> 5. Add Time Record";
+            //                         console.log('response: ' + responseToUser);
+            //                         sendResponse(responseToUser);
+            //                     }).catch( error => {
+            //                     console.log("task Error: "+error);
+            //                     throw new Error('Error Task List')
+            //                 });
+            //             })
+            //             .catch( error => {
+            //                 console.log(error);
+            //                 let responseToUser = "Not Sign In";
+            //                 sendResponse(responseToUser);
+            //             });
+            //     }
+            // });
         },
 
         'user.view.member': () => {
