@@ -9,6 +9,7 @@ const ActiveCollabUrl = 'http://ac.bounche.com/api/v1/';
 const LoginUrl = 'https://achelper-f04aa.firebaseapp.com';
 const UserCollection = '/users/';
 const TaskUrl = '';
+const botbuilder = require('botbuilder')
 
 // CORS Express middleware to enable CORS Requests.
 const cors = require('cors')({origin: true});
@@ -86,7 +87,9 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 request_api(ActiveCollabUrl+'/info', function (error, response, body) {
                     if (!error && response.statusCode == 200) {
                         body = JSON.parse(body);
-                        message = "Hello, "+ userData.name +" "+ body.application + " version: " + body.version;
+                        // message = "Hello, "+ userData.name +" "+ body.application + " version: " + body.version;
+                        message = "Hello, " + userData.name;
+                        message +=  "<br/> What do you want me to do? <br/> 1. View Project <br/> 2. View Task <br/> 3. View All Member <br/> 4. Add Task <br/> 5. Delete Task <br/> 6. Add Time Record";
                         sendResponse(message); // Send simple response to user
                     }else{
                         message = "error bang";
@@ -126,9 +129,53 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                     console.log('response: ' + responseToUser);
                     sendResponse(responseToUser);
                 }else{
-                    let responseToUser = "Already Signin";
+                    let responseToUser = "You have already signin";
                     console.log('response: ' + responseToUser);
                     sendResponse(responseToUser);
+                }
+            });
+        },
+        'user.view.project': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users/'+ACUserID+'/projects',axiosConfig)
+                                .then( task_response => {
+                                    //Send Task List
+                                    let responseToUser = "Project list: <br/>";
+                                    console.log(JSON.stringify(task_response.data));
+                                    task_response.data.forEach((result, index) => {
+                                        responseToUser += (index+1) + " " + result.name + "<br/>"
+                                    });
+                                    responseToUser += "What do you want me to do next? <br/> 1. Add Project <br/> 2. Delete Project <br/> 3. View Task <br/> 4. Add Task <br/> 5. Add Time Record";
+                                    console.log('response: ' + responseToUser);
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                    console.log("project Error: "+error);
+                                    throw new Error('Error View Project')
+                                });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
                 }
             });
         },
@@ -155,11 +202,13 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                             axios.get(ActiveCollabUrl+'users/'+ACUserID+'/tasks',axiosConfig)
                                 .then( task_response => {
                                     //Send Task List
-                                    let responseToUser = "Task List: ";
+                                    let responseToUser = "Task List: <br/>";
                                     console.log(JSON.stringify(task_response.data));
                                     task_response.data.tasks.forEach((result, index) => {
-                                        responseToUser += (index+1) + result.name
+                                        responseToUser += (index+1) + " " + result.name + "<br/>"
                                     });
+
+                                    responseToUser += "What do you want me to do next? <br/> 1. Add Task <br/> 2. Delete Task <br/> 3. View Project <br/> 4. Add Project <br/> 5. Add Time Record";
                                     console.log('response: ' + responseToUser);
                                     sendResponse(responseToUser);
                                 }).catch( error => {
@@ -175,6 +224,54 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 }
             });
         },
+
+        'user.view.member': () => {
+            console.log("masuk ke sini ga?");
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users',axiosConfig)
+                                .then( task_response => {
+                                    console.log("masuk kesini");
+                                    //Send Task List
+                                    let responseToUser = "Member in AC: <br/>";
+                                    console.log(JSON.stringify(task_response.data));
+                                    task_response.data.forEach((result, index) => {
+                                        responseToUser += (index+1) + " " + result.display_name + "<br/>"
+                                    });
+                                    responseToUser += "What do you want me to do next? <br/> 1. View Project <br/> 2. View Task <br/> 3. Add Time Record";
+                                    console.log('response view member: ' + responseToUser);
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                    console.log("view member error: "+error);
+                                    throw new Error('Error View Member')
+                                });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
         // Default handler for unknown or undefined actions
         'default': () => {
             // Use the Actions on Google lib to respond to Google requests; for other requests use JSON
@@ -317,29 +414,29 @@ const richResponses = {
         ]
     },
     'skype': {
-        'text': 'This is a text response for Skype.',
-        'attachments': [{
-            "contentType": "application/vnd.microsoft.card.hero",
+        "type": "message",
+        "text": "Sample with a thumbnail card",
+        "attachments": [
+          {
+            "contentType": "application/vnd.microsoft.card.thumbnail",
             "content": {
-                "title": "Login Link",
-                "subtitle": "Bounche AC Helper",
-                "text": "Please Login to this link",
-                "images": [
-                    {
-                        "url": "https://bounche.com/assets/img/home/logo.png",
-                        "alt": "Bounche logo",
-                    }
-                ],
-                "buttons": [
-                    {
-                        "type": "openUrl",
-                        "title": "Login",
-                        "value": ""
-                    }
-                ]
+              "title": "I'm a thumbnail card",
+              "subtitle": "Please visit my site.",
+              "images": [
+                {
+                  "url": "https://mydeploy.azurewebsites.net/matsu.jpg"
+                }
+              ],
+              "buttons": [
+                {
+                  "type": "openUrl",
+                  "title": "Go to my site",
+                  "value": "https://blogs.msdn.microsoft.com/tsmatsuz"
+                }
+              ]
             }
-        }]
-
+          }
+        ]
     },
     'facebook': {
         'attachment': {
