@@ -360,7 +360,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                             {
                                                 "type": "imBack",
                                                 "title": "Add Time",
-                                                "value": "thankyou"
+                                                "value": "add time project "+project_id+" task "+task_id
                                                 // "value": "project "+result.project_id+" task detail " + result.id
                                             },
                                             {
@@ -437,8 +437,72 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
         },
 
         'add_task_time.add_task_time.custom': () => {
-            let responseToUser = "thankyou bang";
-            sendResponse(responseToUser);
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const task_id = request.body.result.contexts[0].parameters.task_id;
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            const time = request.body.result.contexts[0].parameters.time;
+                            let fixedTime;
+                            switch (time.unit){
+                                case "min":
+                                    fixedTime = time.amount / 60;
+                                    break;
+                                case "h":
+                                    fixedTime = time.amount;
+                                    break;
+                                case "day":
+                                    fixedTime = time.amount * 24;
+                                    break;
+                                case "sec":
+                                    fixedTime = time.amount / 3600;
+                                    break;
+                                default:
+                                    fixedTime = 1;
+                            }
+                            const requestBody = {
+                                task_id: task_id,
+                                value: fixedTime,
+                                user_id: ACUserID,
+                                job_type_id: 1,
+                                record_date: moment().format('YYYY-MM-DD'),
+                            };
+                            axios.post(ActiveCollabUrl+'projects/'+project_id+'/time-records',requestBody,axiosConfig)
+                                .then( task_response => {
+                                    console.log(task_response);
+                                    let responseToUser = "Thankyou";
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("task Error: "+error);
+                                throw new Error('Error Task List')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
         },
 
         'user.view.member': () => {
