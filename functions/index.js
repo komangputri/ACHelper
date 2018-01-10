@@ -5,6 +5,7 @@ const DialogflowApp = require('actions-on-google').DialogflowApp; // Google Assi
 const admin = require('firebase-admin');
 const request_api = require('request');
 const axios = require('axios');
+const moment = require('moment');
 const ActiveCollabUrl = 'http://ac.bounche.com/api/v1/';
 const LoginUrl = 'https://achelper-f04aa.firebaseapp.com';
 const UserCollection = '/users/';
@@ -156,14 +157,84 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                             }
                             axios.get(ActiveCollabUrl+'users/'+ACUserID+'/projects',axiosConfig)
                                 .then( task_response => {
-                                    //Send Task List
-                                    let responseToUser = "Project list: <br/>";
-                                    console.log(JSON.stringify(task_response.data));
-                                    task_response.data.forEach((result, index) => {
-                                        responseToUser += (index+1) + " " + result.name + "<br/>"
+                                    let i,j,temparray,array5 = [],chunk = 5;
+                                    for (i=0,j=task_response.data.length; i<j; i+=chunk) {
+                                        temparray = task_response.data.slice(i,i+chunk);
+                                        array5.push(temparray);
+                                    }
+                                    console.log(array5);
+                                    let mess = [];
+                                    array5.forEach((result, index ) => {
+                                        let message = {
+                                            "type": 4,
+                                            "platform": "skype",
+                                            "payload": {
+                                                "skype": {
+                                                    "type": "message",
+                                                    "attachmentLayout": "carousel",
+                                                    "text": "",
+                                                    "attachments": ""
+                                                }
+                                            }
+                                        };
+                                        let carouselData = [];
+                                        result.forEach((child, newindex) => {
+                                            carouselData.push({
+                                                "contentType": "application\/vnd.microsoft.card.hero",
+                                                "content": {
+                                                "title": child.name,
+                                                    "subtitle": child.body,
+                                                    "text": "",
+                                                    "buttons": [
+                                                    ]
+                                                }
+                                            });
+                                        });
+                                        message.payload.skype.attachments = carouselData;
+                                        mess.push(message);
                                     });
-                                    responseToUser += "What do you want me to do next? <br/> 1. Add Project <br/> 2. Delete Project <br/> 3. View Task <br/> 4. Add Task <br/> 5. Add Time Record";
-                                    console.log('response: ' + responseToUser);
+                                    //Send Task List
+                                    let responseToUser = skypeCarouselCardResponse;
+                                    // let card = [];
+                                    // task_response.data.forEach((result, index) => {
+                                    //     let attachment =
+                                    //     {
+                                    //         "type": 4,
+                                    //         "platform": "skype",
+                                    //         "payload": {
+                                    //             "skype": {
+                                    //                 "type": "message",
+                                    //                     "attachmentLayout": "carousel",
+                                    //                     "text": "",
+                                    //                     "attachments": [
+                                    //                     {
+                                    //                         "contentType": "application\/vnd.microsoft.card.hero",
+                                    //                         "content": {
+                                    //                             "title": result.name,
+                                    //                             "subtitle": result.body,
+                                    //                             "text": "",
+                                    //                             "buttons": [
+                                    //                                 // {
+                                    //                                 //     "type": "imBack",
+                                    //                                 //     "title": "Task List",
+                                    //                                 //     "value": "Task List " + result.id
+                                    //                                 // },
+                                    //                                 // {
+                                    //                                 //     "type": "imBack",
+                                    //                                 //     "title": "User List",
+                                    //                                 //     "value": "User List " + result.id
+                                    //                                 // }
+                                    //                             ]
+                                    //                         }
+                                    //                     }
+                                    //                 ]
+                                    //             }
+                                    //         }
+                                    //     };
+                                    //     card.push(attachment);
+                                    // });
+                                    responseToUser.messages = mess;
+                                    console.log("res: "+ JSON.stringify(responseToUser));
                                     sendResponse(responseToUser);
                                 }).catch( error => {
                                     console.log("project Error: "+error);
@@ -201,14 +272,41 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                             axios.get(ActiveCollabUrl+'users/'+ACUserID+'/tasks',axiosConfig)
                                 .then( task_response => {
                                     //Send Task List
-                                    let responseToUser = "Task List: <br/>";
-                                    console.log(JSON.stringify(task_response.data));
-                                    task_response.data.tasks.forEach((result, index) => {
-                                        responseToUser += (index+1) + " " + result.name + "<br/>"
-                                    });
+                                    // let responseToUser = "Task List: <br/>";
+                                    // console.log(JSON.stringify(task_response.data));
 
-                                    responseToUser += "What do you want me to do next? <br/> 1. Add Task <br/> 2. Delete Task <br/> 3. View Project <br/> 4. Add Project <br/> 5. Add Time Record";
-                                    console.log('response: ' + responseToUser);
+                                    // task_response.data.tasks.forEach((result, index) => {
+                                        // responseToUser += (index+1) + " " + result.name + "<br/>"
+                                    // });
+
+                                    // responseToUser += "What do you want me to do next? <br/> 1. Add Task <br/> 2. Delete Task <br/> 3. View Project <br/> 4. Add Project <br/> 5. Add Time Record";
+                                    // console.log('response: ' + responseToUser);
+
+                                    //Card
+                                    //Send Task List
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Your Task",
+                                                "subtitle": "",
+                                                "text": "Click to See Details",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.tasks.forEach((result, index) => {
+                                        let button = {
+                                            "type": "imBack",
+                                            "title": result.name,
+                                            "value": "project "+result.project_id+" task detail " + result.id
+                                        };
+                                        buttons.push(button);
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
                                     sendResponse(responseToUser);
                                 }).catch( error => {
                                     console.log("task Error: "+error);
@@ -224,53 +322,123 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
             });
         },
 
-        'user.add.task': () => {
-                let responseToUser = "Hallo tambah waktu";
-                sendResponse(responseToUser);
-            // console.log(ac_response)
-            // const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
-            // return Promise.all([getUserPromise]).then(results => {
-            //     const userSnapshot = results[0];
-            //     const userObject = userSnapshot.val();
-            //     if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
-            //         let responseToUser = "Please Signin First";
-            //         sendResponse(responseToUser);
-            //     }else{
-            //         let ACUserID;
-            //         const axiosConfig = {
-            //             headers: {'X-Angie-AuthApiToken': userObject.ACToken}
-            //         };
-            //         //Get User Session == User ID
-            //         axios.get(ActiveCollabUrl+'user-session',axiosConfig)
-            //             .then( ac_response => {
-            //                 ACUserID = ac_response.data.logged_user_id;
-            //                 if (ACUserID === 0){
-            //                     throw new Error('Not Authorize');
-            //                 }
-            //                 axios.get(ActiveCollabUrl+'users/'+ACUserID+'/tasks',axiosConfig)
-            //                     .then( task_response => {
-            //                         //Send Task List
-            //                         let responseToUser = "Task List: <br/>";
-            //                         console.log(JSON.stringify(task_response.data));
-            //                         task_response.data.tasks.forEach((result, index) => {
-            //                             responseToUser += (index+1) + " " + result.name + "<br/>"
-            //                         });
-            //
-            //                         responseToUser += "What do you want me to do next? <br/> 1. Add Task <br/> 2. Delete Task <br/> 3. View Project <br/> 4. Add Project <br/> 5. Add Time Record";
-            //                         console.log('response: ' + responseToUser);
-            //                         sendResponse(responseToUser);
-            //                     }).catch( error => {
-            //                     console.log("task Error: "+error);
-            //                     throw new Error('Error Task List')
-            //                 });
-            //             })
-            //             .catch( error => {
-            //                 console.log(error);
-            //                 let responseToUser = "Not Sign In";
-            //                 sendResponse(responseToUser);
-            //             });
-            //     }
-            // });
+        'user.task.detail': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.parameters.project_id;
+                            const task_id = request.body.result.parameters.task_id;
+                            axios.get(ActiveCollabUrl+'projects/'+project_id+'/tasks/'+task_id,axiosConfig)
+                                .then( task_response => {
+                                    //Card
+                                    // Send Task Detail
+                                    const dateFromTimestamp = (x) => {
+                                        if (x === null) return "";
+                                        return "Due On: "+moment.unix(x).format("DD-MM-YYYY HH:mm");
+                                    };
+                                    let content = {
+                                        "title": task_response.data.single.name,
+                                        "subtitle": dateFromTimestamp(task_response.data.single.due_on),
+                                        "text": task_response.data.single.body,
+                                        "buttons": [
+                                            {
+                                                "type": "imBack",
+                                                "title": "Add Time",
+                                                "value": "thankyou"
+                                                // "value": "project "+result.project_id+" task detail " + result.id
+                                            },
+                                            {
+                                                "type": "imBack",
+                                                "title": "Delete Task",
+                                                "value": "thankyou bro"
+                                                // "value": "project "+result.project_id+" task detail " + result.id
+                                            },
+                                            {
+                                                "type": "imBack",
+                                                "title": "Complete Task",
+                                                "value": "complete task "+task_id
+                                                // "value": "project "+result.project_id+" task detail " + result.id
+                                            },
+                                        ]
+                                    };
+                                    let responseToUser = skypeCardResponse;
+                                    responseToUser.messages[0].payload.skype.attachments[0].content = content;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("task Error: "+error);
+                                throw new Error('Error Task List')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'task_complete.task_complete.yes': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const task_id = request.body.result.contexts[0].parameters.task_id;
+                            axios.put(ActiveCollabUrl+'complete/task/'+task_id,{},axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = "Thankyou";
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                    console.log("task Error: "+error);
+                                    throw new Error('Error Task List')
+                                });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'add_task_time.add_task_time.custom': () => {
+            let responseToUser = "thankyou bang";
+            sendResponse(responseToUser);
         },
 
         'user.view.member': () => {
@@ -380,13 +548,15 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     function sendResponse (responseToUser) {
         // if the response is a string send it as a response to the user
         if (typeof responseToUser === 'string') {
+            // console.log("atas");
             let responseJson = {};
             responseJson.speech = responseToUser; // spoken response
             responseJson.displayText = responseToUser; // displayed response
             response.json(responseJson); // Send response to Dialogflow
         } else {
+            // console.log("bawah");
             // If the response to the user includes rich responses or contexts send them to Dialogflow
-            let responseJson = {};
+            // let responseJson = {};
             // let responseJson = {
             //     "buttons": [
             //         {
@@ -402,16 +572,16 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
             // };
             //
             // If speech or displayText is defined, use it to respond (if one isn't defined use the other's value)
-            responseJson.speech = responseToUser.speech || responseToUser.displayText;
-            responseJson.displayText = responseToUser.displayText || responseToUser.speech;
+            // responseJson.speech = responseToUser.speech || responseToUser.displayText;
+            // responseJson.displayText = responseToUser.displayText || responseToUser.speech;
 
             // Optional: add rich messages for integrations (https://dialogflow.com/docs/rich-messages)
-            responseJson.data = responseToUser.richResponses;
+            // responseJson.data = responseToUser.richResponses;
 
             // Optional: add contexts (https://dialogflow.com/docs/contexts)
-            responseJson.contextOut = responseToUser.outputContexts;
+            // responseJson.contextOut = responseToUser.outputContexts;
 
-            response.json(responseJson); // Send response to Dialogflow
+            response.json(responseToUser); // Send response to Dialogflow
         }
     }
     //Random String Generator
@@ -446,6 +616,241 @@ const googleRichResponse = app.buildRichResponse()
             'Image alternate text'))
     .addSimpleResponse({ speech: 'This is another simple response',
         displayText: 'This is the another simple response 💁' });
+
+const skypeAdaptiveResponse = {
+    "speech": "Alright! 30 min sounds like enough time!",
+    "messages": [
+        {
+            "type": 4,
+            "platform": "skype",
+            "payload": {
+                "skype":
+                    {
+                        "type": "message",
+                        "text": "",
+                        "attachments": [
+                        {
+                            "contentType": "application/vnd.microsoft.card.adaptive",
+                            "content": {
+                                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                                "type": "AdaptiveCard",
+                                "version": "1.0",
+                                "body": [
+                                    {
+                                        "type": "Container",
+                                        "items": [
+                                            {
+                                                "type": "TextBlock",
+                                                "text": "Your Task",
+                                                "weight": "bolder",
+                                                "size": "medium"
+                                            },
+                                            {
+                                                "type": "ColumnSet",
+                                                "columns": [
+                                                    {
+                                                        "type": "Column",
+                                                        "width": "auto",
+                                                        "items": [
+                                                            {
+                                                                "type": "Image",
+                                                                "url": "https://pbs.twimg.com/profile_images/3647943215/d7f12830b3c17a5a9e4afcc370e3a37e_400x400.jpeg",
+                                                                "size": "small",
+                                                                "style": "person"
+                                                            }
+                                                        ]
+                                                    },
+                                                    {
+                                                        "type": "Column",
+                                                        "width": "stretch",
+                                                        "items": [
+                                                            {
+                                                                "type": "TextBlock",
+                                                                "text": "Matt Hidinger",
+                                                                "weight": "bolder",
+                                                                "wrap": true
+                                                            },
+                                                            {
+                                                                "type": "TextBlock",
+                                                                "spacing": "none",
+                                                                "text": "Created {{DATE(2017-02-14T06:08:39Z,SHORT)}}",
+                                                                "isSubtle": true,
+                                                                "wrap": true
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "type": "Container",
+                                        "items": [
+                                            {
+                                                "type": "TextBlock",
+                                                "text": "Now that we have defined the main rules and features of the format, we need to produce a schema and publish it to GitHub. The schema will be the starting point of our reference documentation.",
+                                                "wrap": true
+                                            },
+                                            {
+                                                "type": "FactSet",
+                                                "facts": [
+                                                    {
+                                                        "title": "Board:",
+                                                        "value": "Adaptive Card"
+                                                    },
+                                                    {
+                                                        "title": "List:",
+                                                        "value": "Backlog"
+                                                    },
+                                                    {
+                                                        "title": "Assigned to:",
+                                                        "value": "Matt Hidinger"
+                                                    },
+                                                    {
+                                                        "title": "Due date:",
+                                                        "value": "Not set"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "actions": [
+                                    {
+                                        "type": "Action.ShowCard",
+                                        "title": "Set due date",
+                                        "card": {
+                                            "type": "AdaptiveCard",
+                                            "body": [
+                                                {
+                                                    "type": "Input.Date",
+                                                    "id": "dueDate",
+                                                    "title": "Select due date"
+                                                }
+                                            ],
+                                            "actions": [
+                                                {
+                                                    "type": "Action.Submit",
+                                                    "title": "OK"
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "type": "Action.ShowCard",
+                                        "title": "Comment",
+                                        "card": {
+                                            "type": "AdaptiveCard",
+                                            "body": [
+                                                {
+                                                    "type": "Input.Text",
+                                                    "id": "comment",
+                                                    "isMultiline": true,
+                                                    "placeholder": "Enter your comment"
+                                                }
+                                            ],
+                                            "actions": [
+                                                {
+                                                    "type": "Action.Submit",
+                                                    "title": "OK"
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "type": "Action.OpenUrl",
+                                        "title": "View",
+                                        "url": "http://adaptivecards.io"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+};
+
+const skypeCardResponse = {
+    "speech": "Alright! 30 min sounds like enough time!",
+    "messages": [
+        {
+            "type": 4,
+            "platform": "skype",
+            "payload": {
+                "skype": {
+                    "type": "message",
+                    "attachmentLayout": "list",
+                    "text": "",
+                    "attachments": [
+                        {
+                            "contentType": "application\/vnd.microsoft.card.hero",
+                            "content": {
+                                "title": "Unit 2A Availibity",
+                                "subtitle": "Max Participants 12",
+                                "text": "",
+                                "buttons": [
+                                    {
+                                        "type": "imBack",
+                                        "title": "08:00:00\/09:00:00",
+                                        "value": "08:00:00\/09:00:00"
+                                    },
+                                    {
+                                        "type": "imBack",
+                                        "title": "09:30:00\/18:00:00",
+                                        "value": "09:30:00\/18:00:00"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+};
+
+const skypeCarouselCardResponse = {
+    "speech": "Alright! 30 min sounds like enough time!",
+    "messages": [
+        {
+            "type": 4,
+            "platform": "skype",
+            "payload": {
+                "skype": {
+                    "type": "message",
+                    "attachmentLayout": "carousel",
+                    "text": "",
+                    "attachments": [
+                        {
+                            "contentType": "application\/vnd.microsoft.card.hero",
+                            "content": {
+                                "title": "Unit 2A Availibity",
+                                "subtitle": "Max Participants 12",
+                                "text": "",
+                                "buttons": [
+                                    {
+                                        "type": "imBack",
+                                        "title": "08:00:00\/09:00:00",
+                                        "value": "08:00:00\/09:00:00"
+                                    },
+                                    {
+                                        "type": "imBack",
+                                        "title": "09:30:00\/18:00:00",
+                                        "value": "09:30:00\/18:00:00"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    ]
+};
+
+
 
 // Rich responses for both Slack and Facebook
 const richResponses = {

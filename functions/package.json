@@ -19,6 +19,7 @@
     "cors": "^2.8.4",
     "firebase-admin": "^4.2.1",
     "firebase-functions": "^0.5.7",
+    "moment": "^2.20.1",
     "request": "^2.83.0"
   }
 }
