@@ -186,6 +186,11 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                                     "subtitle": child.body,
                                                     "text": "",
                                                     "buttons": [
+                                                        {
+                                                            "type": "imBack",
+                                                            "title": "View",
+                                                            "value": "project " + child.id + " task list "
+                                                        }
                                                     ]
                                                 }
                                             });
@@ -240,6 +245,68 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                     console.log("project Error: "+error);
                                     throw new Error('Error View Project')
                                 });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+        'user.project.task.list': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.parameters.project_id;
+                            axios.get(ActiveCollabUrl+'projects/'+project_id+'/tasks',axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Your Task",
+                                                "subtitle": "",
+                                                "text": "Click to See Details",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.tasks.forEach((result, index) => {
+                                        if (result.assignee_id === ACUserID){
+                                            let button = {
+                                                "type": "imBack",
+                                                "title": result.name,
+                                                "value": "project "+result.project_id+" task detail " + result.id
+                                            };
+                                            buttons.push(button);
+                                        }
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project task list user Error: "+error);
+                                throw new Error('Error View Project task list user')
+                            });
                         })
                         .catch( error => {
                             console.log(error);
@@ -366,7 +433,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                             {
                                                 "type": "imBack",
                                                 "title": "Delete Task",
-                                                "value": "thankyou bro"
+                                                "value": "task "+task_id+" projectid "+project_id+" delete"
                                                 // "value": "project "+result.project_id+" task detail " + result.id
                                             },
                                             {
@@ -494,6 +561,50 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                 }).catch( error => {
                                 console.log("task Error: "+error);
                                 throw new Error('Error Task List')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'task_delete.task_delete.confirmation': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const task_id = request.body.result.contexts[0].parameters.task_id;
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            axios.delete(ActiveCollabUrl+'projects/'+project_id+'/tasks/'+task_id,axiosConfig)
+                                .then( task_response => {
+                                    console.log(task_response);
+                                    let responseToUser = "Thankyou";
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("delete task Error: "+error);
+                                throw new Error('Error Delete Task')
                             });
                         })
                         .catch( error => {
