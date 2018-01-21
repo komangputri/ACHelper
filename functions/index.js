@@ -135,6 +135,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 }
             });
         },
+
         'user.view.project': () => {
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
@@ -254,6 +255,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 }
             });
         },
+
         'user.project.task.list': () => {
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
@@ -316,6 +318,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 }
             });
         },
+
         'user.task.list': () => {
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
@@ -606,6 +609,185 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                 console.log("delete task Error: "+error);
                                 throw new Error('Error Delete Task')
                             });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'user.add.task': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users/'+ACUserID+'/projects',axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Select Project",
+                                                "subtitle": "",
+                                                "text": "Click to select",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.forEach((result, index) => {
+                                        let button = {
+                                            "type": "imBack",
+                                            "title": result.name,
+                                            "value": "project "+result.id
+                                        };
+                                        buttons.push(button);
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project Error: "+error);
+                                throw new Error('Error View Project')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'add_task.add_task.projectlist': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            axios.get(ActiveCollabUrl+'projects/'+project_id+'/task-lists',axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Select Task List",
+                                                "subtitle": "",
+                                                "text": "Click to select",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.forEach((result, index) => {
+                                        let button = {
+                                            "type": "imBack",
+                                            "title": result.name,
+                                            "value": "project "+project_id+" task_list "+result.id
+                                        };
+                                        buttons.push(button);
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project Error: "+error);
+                                throw new Error('Error View Project')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'add_task.add_task.projectlist.add_task_projectlist.tasklist.add_task_projectlist_tasklist.name': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            const task_list_id = request.body.result.contexts[0].parameters.tasklist_id;
+                            const task_name = request.body.result.contexts[0].parameters.task_name;
+                            console.log(project_id, task_list_id,task_name);
+                            const body = {
+                                name: task_name,
+                                task_list_id: task_list_id,
+                                assignee_id: ACUserID
+                            };
+                            console.log(body);
+                            axios.post(ActiveCollabUrl+'/projects/'+project_id+'/tasks',body,axiosConfig)
+                                .then( response => {
+                                    let responseToUser = "Thankyou";
+                                    sendResponse(responseToUser);
+
+                                }).catch( error => {
+                                    console.log("task Error: "+error);
+                                    throw new Error('Error Task List')
+                                });
                         })
                         .catch( error => {
                             console.log(error);
