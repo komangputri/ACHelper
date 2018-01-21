@@ -100,41 +100,8 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                             if (ACUserID === 0){
                                 throw new Error('Not Authorize');
                             }
-                            let responseToUser = skypeCardResponse;
-                            const attachment = [
-                                {
-                                    "contentType": "application\/vnd.microsoft.card.hero",
-                                    "content": {
-                                        "title": "Welcome "+userData.name,
-                                        "subtitle": "",
-                                        "text": "Click to select",
-                                        "buttons": [
-                                            {
-                                                "type": "imBack",
-                                                "title": "View Project",
-                                                "value": "view project"
-                                            },
-                                            {
-                                                "type": "imBack",
-                                                "title": "View Task",
-                                                "value": "list kerjaan"
-                                            },
-                                            {
-                                                "type": "imBack",
-                                                "title": "View All Member",
-                                                "value": "view member"
-                                            },
-                                            {
-                                                "type": "imBack",
-                                                "title": "Add Task",
-                                                "value": "tambah kerjaan"
-                                            }
-                                        ]
-                                    }
-                                }
-                            ];
-                            responseToUser.messages[0].payload.skype.attachments = attachment;
-                            sendResponse(responseToUser);
+                            const response = skypeButtonList("Welcome "+userData.name);
+                            sendResponse(response);
                         })
                         .catch( error => {
                             console.log(error);
@@ -844,7 +811,6 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
         },
 
         'user.view.member': () => {
-            console.log("masuk ke sini ga?");
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
                 const userSnapshot = results[0];
@@ -866,15 +832,30 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                             }
                             axios.get(ActiveCollabUrl+'users',axiosConfig)
                                 .then( task_response => {
-                                    console.log("masuk kesini");
-                                    //Send Task List
-                                    let responseToUser = "Member in AC: <br/>";
-                                    console.log(JSON.stringify(task_response.data));
+                                    let responseToUser = skypeCardResponse;
+                                    let member_list = "## Member List ##\n\n";
+                                    console.log(task_response);
                                     task_response.data.forEach((result, index) => {
-                                        responseToUser += (index+1) + " " + result.display_name + "<br/>"
+                                        member_list += (index+1) + ". **" + result.display_name + "**\n\n"
                                     });
-                                    responseToUser += "What do you want me to do next? <br/> 1. View Project <br/> 2. View Task <br/> 3. Add Time Record";
-                                    console.log('response view member: ' + responseToUser);
+                                    console.log(member_list);
+                                    let message = {
+                                        "type": 4,
+                                        "platform": "skype",
+                                        "payload": {
+                                            "skype": {
+                                                "type": "message",
+                                                "attachmentLayout": "list",
+                                                "text": member_list,
+                                                "attachments": skypeButtonList("Need Anything?", true)
+                                            }
+                                        }
+                                    };
+                                    console.log(message);
+
+
+                                    responseToUser.messages[0] = message;
+                                    console.log(responseToUser);
                                     sendResponse(responseToUser);
                                 }).catch( error => {
                                     console.log("view member error: "+error);
@@ -1211,6 +1192,47 @@ const skypeCardResponse = {
             }
         }
     ]
+};
+
+const skypeButtonList = (title, button_only = false) => {
+    let responseToUser = skypeCardResponse;
+    const attachment = [
+        {
+            "contentType": "application\/vnd.microsoft.card.hero",
+            "content": {
+                "title": title,
+                "subtitle": "",
+                "text": "Click to select",
+                "buttons": [
+                    {
+                        "type": "imBack",
+                        "title": "View Project",
+                        "value": "view project"
+                    },
+                    {
+                        "type": "imBack",
+                        "title": "View Task",
+                        "value": "list kerjaan"
+                    },
+                    {
+                        "type": "imBack",
+                        "title": "View All Member",
+                        "value": "view member"
+                    },
+                    {
+                        "type": "imBack",
+                        "title": "Add Task",
+                        "value": "tambah kerjaan"
+                    }
+                ]
+            }
+        }
+    ];
+    if (button_only){
+        return attachment;
+    }
+    responseToUser.messages[0].payload.skype.attachments = attachment;
+    return responseToUser;
 };
 
 const skypeCarouselCardResponse = {
