@@ -78,26 +78,71 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     const actionHandlers = {
         // The default welcome intent has been matched, welcome the user (https://dialogflow.com/docs/events#default_welcome_intent)
         'input.welcome': () => {
-        // Use the Actions on Google lib to respond to Google requests; for other requests use JSON
-        if (requestSource === googleAssistantRequest) {
-            sendGoogleResponse('Hello, Welcome to my Dialogflow agent!'); // Send simple response to user
-        } else {
-            let message;
-              // When something is added, make the ajax call
-                request_api(ActiveCollabUrl+'/info', function (error, response, body) {
-                    if (!error && response.statusCode == 200) {
-                        body = JSON.parse(body);
-                        // message = "Hello, "+ userData.name +" "+ body.application + " version: " + body.version;
-                        message = "Hello, " + userData.name;
-                        message +=  "<br/> What do you want me to do? <br/> 1. View Project <br/> 2. View Task <br/> 3. View All Member <br/> 4. Add Task <br/> 5. Delete Task <br/> 6. Add Time Record";
-                        sendResponse(message); // Send simple response to user
-                    }else{
-                        message = "error bang";
-                        console.log('error: '+ error);
-                        sendResponse(message); // Send simple response to user
-                    }
-                });
-            }
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            let responseToUser = skypeCardResponse;
+                            const attachment = [
+                                {
+                                    "contentType": "application\/vnd.microsoft.card.hero",
+                                    "content": {
+                                        "title": "Welcome "+userData.name,
+                                        "subtitle": "",
+                                        "text": "Click to select",
+                                        "buttons": [
+                                            {
+                                                "type": "imBack",
+                                                "title": "View Project",
+                                                "value": "view project"
+                                            },
+                                            {
+                                                "type": "imBack",
+                                                "title": "View Task",
+                                                "value": "list kerjaan"
+                                            },
+                                            {
+                                                "type": "imBack",
+                                                "title": "View All Member",
+                                                "value": "view member"
+                                            },
+                                            {
+                                                "type": "imBack",
+                                                "title": "Add Task",
+                                                "value": "tambah kerjaan"
+                                            }
+                                        ]
+                                    }
+                                }
+                            ];
+                            responseToUser.messages[0].payload.skype.attachments = attachment;
+                            sendResponse(responseToUser);
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
         },
         // The default fallback intent has been matched, try to recover (https://dialogflow.com/docs/intents#fallback_intents)
         'input.unknown': () => {
