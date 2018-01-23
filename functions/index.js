@@ -871,6 +871,186 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
             });
         },
 
+        'user.project.delete': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users/'+ACUserID+'/projects',axiosConfig)
+                                .then( task_response => {
+                                    let i,j,temparray,array5 = [],chunk = 5;
+                                    for (i=0,j=task_response.data.length; i<j; i+=chunk) {
+                                        temparray = task_response.data.slice(i,i+chunk);
+                                        array5.push(temparray);
+                                    }
+                                    console.log(array5);
+                                    let mess = [];
+                                    array5.forEach((result, index ) => {
+                                        let message = {
+                                            "type": 4,
+                                            "platform": "skype",
+                                            "payload": {
+                                                "skype": {
+                                                    "type": "message",
+                                                    "attachmentLayout": "carousel",
+                                                    "text": "",
+                                                    "attachments": ""
+                                                }
+                                            }
+                                        };
+                                        let carouselData = [];
+                                        result.forEach((child, newindex) => {
+                                            carouselData.push({
+                                                "contentType": "application\/vnd.microsoft.card.hero",
+                                                "content": {
+                                                    "title": child.name,
+                                                    "subtitle": child.body,
+                                                    "text": "",
+                                                    "buttons": [
+                                                        {
+                                                            "type": "imBack",
+                                                            "title": "select",
+                                                            "value": "select "+child.id
+                                                        }
+                                                    ]
+                                                }
+                                            });
+                                        });
+                                        message.payload.skype.attachments = carouselData;
+                                        mess.push(message);
+                                    });
+                                    //Send Task List
+                                    let responseToUser = skypeCarouselCardResponse;
+                                    // let card = [];
+                                    // task_response.data.forEach((result, index) => {
+                                    //     let attachment =
+                                    //     {
+                                    //         "type": 4,
+                                    //         "platform": "skype",
+                                    //         "payload": {
+                                    //             "skype": {
+                                    //                 "type": "message",
+                                    //                     "attachmentLayout": "carousel",
+                                    //                     "text": "",
+                                    //                     "attachments": [
+                                    //                     {
+                                    //                         "contentType": "application\/vnd.microsoft.card.hero",
+                                    //                         "content": {
+                                    //                             "title": result.name,
+                                    //                             "subtitle": result.body,
+                                    //                             "text": "",
+                                    //                             "buttons": [
+                                    //                                 // {
+                                    //                                 //     "type": "imBack",
+                                    //                                 //     "title": "Task List",
+                                    //                                 //     "value": "Task List " + result.id
+                                    //                                 // },
+                                    //                                 // {
+                                    //                                 //     "type": "imBack",
+                                    //                                 //     "title": "User List",
+                                    //                                 //     "value": "User List " + result.id
+                                    //                                 // }
+                                    //                             ]
+                                    //                         }
+                                    //                     }
+                                    //                 ]
+                                    //             }
+                                    //         }
+                                    //     };
+                                    //     card.push(attachment);
+                                    // });
+                                    responseToUser.messages = mess;
+                                    console.log("res: "+ JSON.stringify(responseToUser));
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project Error: "+error);
+                                throw new Error('Error View Project')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'user.delete.member': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users',axiosConfig)
+                                .then( task_response => {
+                                    //Card
+                                    let responseToUser = skypeCardResponse;
+                                    let member_list = "## Member List ##\n\n";
+                                    console.log(task_response);
+                                    task_response.data.forEach((result, index) => {
+                                        member_list += result.id + " **" + result.display_name + "**\n\n"
+                                    });
+                                    member_list += "Please type 'member {user id} delete' to select";
+                                    console.log(member_list);
+                                    let message = {
+                                        "type": 4,
+                                        "platform": "skype",
+                                        "payload": {
+                                            "skype": {
+                                                "type": "message",
+                                                "attachmentLayout": "list",
+                                                "text": member_list,
+                                            }
+                                        }
+                                    };
+                                    console.log(message);
+                                    responseToUser.messages[0] = message;
+                                    console.log(responseToUser);
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("task Error: "+error);
+                                throw new Error('Error Task List')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
         // Default handler for unknown or undefined actions
         'default': () => {
             // Use the Actions on Google lib to respond to Google requests; for other requests use JSON
