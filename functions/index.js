@@ -78,26 +78,38 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
     const actionHandlers = {
         // The default welcome intent has been matched, welcome the user (https://dialogflow.com/docs/events#default_welcome_intent)
         'input.welcome': () => {
-        // Use the Actions on Google lib to respond to Google requests; for other requests use JSON
-        if (requestSource === googleAssistantRequest) {
-            sendGoogleResponse('Hello, Welcome to my Dialogflow agent!'); // Send simple response to user
-        } else {
-            let message;
-              // When something is added, make the ajax call
-                request_api(ActiveCollabUrl+'/info', function (error, response, body) {
-                    if (!error && response.statusCode == 200) {
-                        body = JSON.parse(body);
-                        // message = "Hello, "+ userData.name +" "+ body.application + " version: " + body.version;
-                        message = "Hello, " + userData.name;
-                        message +=  "<br/> What do you want me to do? <br/> 1. View Project <br/> 2. View Task <br/> 3. View All Member <br/> 4. Add Task <br/> 5. Delete Task <br/> 6. Add Time Record";
-                        sendResponse(message); // Send simple response to user
-                    }else{
-                        message = "error bang";
-                        console.log('error: '+ error);
-                        sendResponse(message); // Send simple response to user
-                    }
-                });
-            }
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const response = skypeButtonList("Welcome "+userData.name);
+                            sendResponse(response);
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
         },
         // The default fallback intent has been matched, try to recover (https://dialogflow.com/docs/intents#fallback_intents)
         'input.unknown': () => {
@@ -135,6 +147,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 }
             });
         },
+
         'user.view.project': () => {
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
@@ -186,6 +199,11 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                                     "subtitle": child.body,
                                                     "text": "",
                                                     "buttons": [
+                                                        {
+                                                            "type": "imBack",
+                                                            "title": "View",
+                                                            "value": "project " + child.id + " task list "
+                                                        }
                                                     ]
                                                 }
                                             });
@@ -249,6 +267,70 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                 }
             });
         },
+
+        'user.project.task.list': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.parameters.project_id;
+                            axios.get(ActiveCollabUrl+'projects/'+project_id+'/tasks',axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Your Task",
+                                                "subtitle": "",
+                                                "text": "Click to See Details",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.tasks.forEach((result, index) => {
+                                        if (result.assignee_id === ACUserID){
+                                            let button = {
+                                                "type": "imBack",
+                                                "title": result.name,
+                                                "value": "project "+result.project_id+" task detail " + result.id
+                                            };
+                                            buttons.push(button);
+                                        }
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project task list user Error: "+error);
+                                throw new Error('Error View Project task list user')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
         'user.task.list': () => {
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
@@ -366,7 +448,7 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                                             {
                                                 "type": "imBack",
                                                 "title": "Delete Task",
-                                                "value": "thankyou bro"
+                                                "value": "task "+task_id+" projectid "+project_id+" delete"
                                                 // "value": "project "+result.project_id+" task detail " + result.id
                                             },
                                             {
@@ -505,8 +587,230 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
             });
         },
 
+        'task_delete.task_delete.confirmation': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const task_id = request.body.result.contexts[0].parameters.task_id;
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            axios.delete(ActiveCollabUrl+'projects/'+project_id+'/tasks/'+task_id,axiosConfig)
+                                .then( task_response => {
+                                    console.log(task_response);
+                                    let responseToUser = "Thankyou";
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("delete task Error: "+error);
+                                throw new Error('Error Delete Task')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'user.add.task': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users/'+ACUserID+'/projects',axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Select Project",
+                                                "subtitle": "",
+                                                "text": "Click to select",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.forEach((result, index) => {
+                                        let button = {
+                                            "type": "imBack",
+                                            "title": result.name,
+                                            "value": "project "+result.id
+                                        };
+                                        buttons.push(button);
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project Error: "+error);
+                                throw new Error('Error View Project')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'add_task.add_task.projectlist': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            axios.get(ActiveCollabUrl+'projects/'+project_id+'/task-lists',axiosConfig)
+                                .then( task_response => {
+                                    let responseToUser = skypeCardResponse;
+                                    let buttons = [];
+                                    let attachment = [
+                                        {
+                                            "contentType": "application\/vnd.microsoft.card.hero",
+                                            "content": {
+                                                "title": "Select Task List",
+                                                "subtitle": "",
+                                                "text": "Click to select",
+                                                "buttons": ""
+                                            }
+                                        }
+                                    ];
+                                    task_response.data.forEach((result, index) => {
+                                        let button = {
+                                            "type": "imBack",
+                                            "title": result.name,
+                                            "value": "project "+project_id+" task_list "+result.id
+                                        };
+                                        buttons.push(button);
+                                    });
+                                    attachment[0].content.buttons = buttons;
+                                    responseToUser.messages[0].payload.skype.attachments = attachment;
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project Error: "+error);
+                                throw new Error('Error View Project')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'add_task.add_task.projectlist.add_task_projectlist.tasklist.add_task_projectlist_tasklist.name': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {
+                            'X-Angie-AuthApiToken': userObject.ACToken,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            const project_id = request.body.result.contexts[0].parameters.project_id;
+                            const task_list_id = request.body.result.contexts[0].parameters.tasklist_id;
+                            const task_name = request.body.result.contexts[0].parameters.task_name;
+                            console.log(project_id, task_list_id,task_name);
+                            const body = {
+                                name: task_name,
+                                task_list_id: task_list_id,
+                                assignee_id: ACUserID
+                            };
+                            console.log(body);
+                            axios.post(ActiveCollabUrl+'/projects/'+project_id+'/tasks',body,axiosConfig)
+                                .then( response => {
+                                    let responseToUser = "Thankyou";
+                                    sendResponse(responseToUser);
+
+                                }).catch( error => {
+                                    console.log("task Error: "+error);
+                                    throw new Error('Error Task List')
+                                });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
         'user.view.member': () => {
-            console.log("masuk ke sini ga?");
             const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
             return Promise.all([getUserPromise]).then(results => {
                 const userSnapshot = results[0];
@@ -528,20 +832,215 @@ exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, resp
                             }
                             axios.get(ActiveCollabUrl+'users',axiosConfig)
                                 .then( task_response => {
-                                    console.log("masuk kesini");
-                                    //Send Task List
-                                    let responseToUser = "Member in AC: <br/>";
-                                    console.log(JSON.stringify(task_response.data));
+                                    let responseToUser = skypeCardResponse;
+                                    let member_list = "## Member List ##\n\n";
+                                    console.log(task_response);
                                     task_response.data.forEach((result, index) => {
-                                        responseToUser += (index+1) + " " + result.display_name + "<br/>"
+                                        member_list += (index+1) + ". **" + result.display_name + "**\n\n"
                                     });
-                                    responseToUser += "What do you want me to do next? <br/> 1. View Project <br/> 2. View Task <br/> 3. Add Time Record";
-                                    console.log('response view member: ' + responseToUser);
+                                    console.log(member_list);
+                                    let message = {
+                                        "type": 4,
+                                        "platform": "skype",
+                                        "payload": {
+                                            "skype": {
+                                                "type": "message",
+                                                "attachmentLayout": "list",
+                                                "text": member_list,
+                                                "attachments": skypeButtonList("Need Anything?", true)
+                                            }
+                                        }
+                                    };
+                                    console.log(message);
+
+
+                                    responseToUser.messages[0] = message;
+                                    console.log(responseToUser);
                                     sendResponse(responseToUser);
                                 }).catch( error => {
                                     console.log("view member error: "+error);
                                     throw new Error('Error View Member')
                                 });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'user.project.delete': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users/'+ACUserID+'/projects',axiosConfig)
+                                .then( task_response => {
+                                    let i,j,temparray,array5 = [],chunk = 5;
+                                    for (i=0,j=task_response.data.length; i<j; i+=chunk) {
+                                        temparray = task_response.data.slice(i,i+chunk);
+                                        array5.push(temparray);
+                                    }
+                                    console.log(array5);
+                                    let mess = [];
+                                    array5.forEach((result, index ) => {
+                                        let message = {
+                                            "type": 4,
+                                            "platform": "skype",
+                                            "payload": {
+                                                "skype": {
+                                                    "type": "message",
+                                                    "attachmentLayout": "carousel",
+                                                    "text": "",
+                                                    "attachments": ""
+                                                }
+                                            }
+                                        };
+                                        let carouselData = [];
+                                        result.forEach((child, newindex) => {
+                                            carouselData.push({
+                                                "contentType": "application\/vnd.microsoft.card.hero",
+                                                "content": {
+                                                    "title": child.name,
+                                                    "subtitle": child.body,
+                                                    "text": "",
+                                                    "buttons": [
+                                                        {
+                                                            "type": "imBack",
+                                                            "title": "select",
+                                                            "value": "select "+child.id
+                                                        }
+                                                    ]
+                                                }
+                                            });
+                                        });
+                                        message.payload.skype.attachments = carouselData;
+                                        mess.push(message);
+                                    });
+                                    //Send Task List
+                                    let responseToUser = skypeCarouselCardResponse;
+                                    // let card = [];
+                                    // task_response.data.forEach((result, index) => {
+                                    //     let attachment =
+                                    //     {
+                                    //         "type": 4,
+                                    //         "platform": "skype",
+                                    //         "payload": {
+                                    //             "skype": {
+                                    //                 "type": "message",
+                                    //                     "attachmentLayout": "carousel",
+                                    //                     "text": "",
+                                    //                     "attachments": [
+                                    //                     {
+                                    //                         "contentType": "application\/vnd.microsoft.card.hero",
+                                    //                         "content": {
+                                    //                             "title": result.name,
+                                    //                             "subtitle": result.body,
+                                    //                             "text": "",
+                                    //                             "buttons": [
+                                    //                                 // {
+                                    //                                 //     "type": "imBack",
+                                    //                                 //     "title": "Task List",
+                                    //                                 //     "value": "Task List " + result.id
+                                    //                                 // },
+                                    //                                 // {
+                                    //                                 //     "type": "imBack",
+                                    //                                 //     "title": "User List",
+                                    //                                 //     "value": "User List " + result.id
+                                    //                                 // }
+                                    //                             ]
+                                    //                         }
+                                    //                     }
+                                    //                 ]
+                                    //             }
+                                    //         }
+                                    //     };
+                                    //     card.push(attachment);
+                                    // });
+                                    responseToUser.messages = mess;
+                                    console.log("res: "+ JSON.stringify(responseToUser));
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("project Error: "+error);
+                                throw new Error('Error View Project')
+                            });
+                        })
+                        .catch( error => {
+                            console.log(error);
+                            let responseToUser = "Not Sign In";
+                            sendResponse(responseToUser);
+                        });
+                }
+            });
+        },
+
+        'user.delete.member': () => {
+            const getUserPromise = admin.database().ref(UserCollection + userData.id).once('value');
+            return Promise.all([getUserPromise]).then(results => {
+                const userSnapshot = results[0];
+                const userObject = userSnapshot.val();
+                if (userObject === null || !userSnapshot.hasChild('ACToken') || !userSnapshot.hasChild('ACEmail')){
+                    let responseToUser = "Please Signin First";
+                    sendResponse(responseToUser);
+                }else{
+                    let ACUserID;
+                    const axiosConfig = {
+                        headers: {'X-Angie-AuthApiToken': userObject.ACToken}
+                    };
+                    //Get User Session == User ID
+                    axios.get(ActiveCollabUrl+'user-session',axiosConfig)
+                        .then( ac_response => {
+                            ACUserID = ac_response.data.logged_user_id;
+                            if (ACUserID === 0){
+                                throw new Error('Not Authorize');
+                            }
+                            axios.get(ActiveCollabUrl+'users',axiosConfig)
+                                .then( task_response => {
+                                    //Card
+                                    let responseToUser = skypeCardResponse;
+                                    let member_list = "## Member List ##\n\n";
+                                    console.log(task_response);
+                                    task_response.data.forEach((result, index) => {
+                                        member_list += result.id + " **" + result.display_name + "**\n\n"
+                                    });
+                                    member_list += "Please type 'member {user id} delete' to select";
+                                    console.log(member_list);
+                                    let message = {
+                                        "type": 4,
+                                        "platform": "skype",
+                                        "payload": {
+                                            "skype": {
+                                                "type": "message",
+                                                "attachmentLayout": "list",
+                                                "text": member_list,
+                                            }
+                                        }
+                                    };
+                                    console.log(message);
+                                    responseToUser.messages[0] = message;
+                                    console.log(responseToUser);
+                                    sendResponse(responseToUser);
+                                }).catch( error => {
+                                console.log("task Error: "+error);
+                                throw new Error('Error Task List')
+                            });
                         })
                         .catch( error => {
                             console.log(error);
@@ -873,6 +1372,47 @@ const skypeCardResponse = {
             }
         }
     ]
+};
+
+const skypeButtonList = (title, button_only = false) => {
+    let responseToUser = skypeCardResponse;
+    const attachment = [
+        {
+            "contentType": "application\/vnd.microsoft.card.hero",
+            "content": {
+                "title": title,
+                "subtitle": "",
+                "text": "Click to select",
+                "buttons": [
+                    {
+                        "type": "imBack",
+                        "title": "View Project",
+                        "value": "view project"
+                    },
+                    {
+                        "type": "imBack",
+                        "title": "View Task",
+                        "value": "list kerjaan"
+                    },
+                    {
+                        "type": "imBack",
+                        "title": "View All Member",
+                        "value": "view member"
+                    },
+                    {
+                        "type": "imBack",
+                        "title": "Add Task",
+                        "value": "tambah kerjaan"
+                    }
+                ]
+            }
+        }
+    ];
+    if (button_only){
+        return attachment;
+    }
+    responseToUser.messages[0].payload.skype.attachments = attachment;
+    return responseToUser;
 };
 
 const skypeCarouselCardResponse = {
